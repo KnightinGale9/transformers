@@ -362,10 +362,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         supports PyTorch.
 
         Args:
-            outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`]
 
         Returns:
-            Tensor: A tensor of shape `batch_size, num_labels, height, width`
+            `torch.Tensor`:
+                A tensor of shape `batch_size, num_labels, height, width`
         """
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
@@ -399,16 +401,21 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         and `labels`
 
         Args:
-            masks (`torch.Tensor`): A tensor of shape `(num_queries, height, width)`
-            scores (`torch.Tensor`): A tensor of shape `(num_queries)`
-            labels (`torch.Tensor`): A tensor of shape `(num_queries)`
-            object_mask_threshold (float): A number between 0 and 1 used to binarize the masks
+            masks (`torch.Tensor`):
+                A tensor of shape `(num_queries, height, width)`
+            scores (`torch.Tensor`):
+                A tensor of shape `(num_queries)`
+            labels (`torch.Tensor`):
+                A tensor of shape `(num_queries)`
+            object_mask_threshold (`float`):
+                A number between 0 and 1 used to binarize the masks
 
         Raises:
-            ValueError: When the first dimension doesn't match in all input tensors
+            `ValueError`: Raised when the first dimension doesn't match in all input tensors
 
         Returns:
-            Tuple[Tensor, Tensor, Tensor]: The inputs tensors without the region with `< object_mask_threshold`
+            `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the
+            region < `object_mask_threshold`
         """
         if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
             raise ValueError("mask, scores and labels must have the same shape!")
@@ -425,10 +432,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         supports PyTorch.
 
         Args:
-            outputs (`MaskFormerForInstanceSegmentationOutput`): The outputs from MaskFormerForInstanceSegmentation
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`]
 
         Returns:
-            Tensor: A tensor of shape `batch_size, height, width`
+            `torch.Tensor`: A tensor of shape `batch_size, height, width`
         """
         segmentation: Tensor = self.post_process_segmentation(outputs, target_size)
         semantic_segmentation: Tensor = segmentation.argmax(dim=1)
@@ -446,12 +454,15 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         predictions. Only supports PyTorch.
 
         Args:
-            outputs (`MaskFormerForInstanceSegmentationOutput`): [description]
-            object_mask_threshold (Optional[float], optional): [description]. Defaults to 0.8.
-            overlap_mask_area_threshold (Optional[float], optional): [description]. Defaults to 0.8.
-            is_thing_map (Dict[int, bool], optional): [description].
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`]
+            object_mask_threshold (`float`, *optional*, defaults to `0.8`):
+                The object mask threshold.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to `0.8`):
+                The overlap mask area threshold.
+            is_thing_map (`Dict[int, bool]`, *optional*, defaults to `None`):
                 Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
-                If not set, defaults to the `is_thing_map` of COCO panoptic.
+                If not set, defaults to the `is_thing_map` of ADE20K-150 panoptic.
 
         Returns:
             Returns:

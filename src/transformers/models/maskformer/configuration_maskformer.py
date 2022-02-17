@@ -14,7 +14,7 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 import copy
-from typing import Dict
+from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -44,20 +44,29 @@ class MaskFormerConfig(PretrainedConfig):
     Currently, maskformer supports only Swin backbone.
 
     Args:
-        mask_feature_size (Optional[int], optional):
-            The masks' features size, this value will also be used to specify the Feature Pyramid Network features
-            size. Defaults to 256.
-        no_object_weight (Optional[float], optional): Weight to apply to the null class . Defaults to 0.1.
-        use_auxilary_loss (Optional[bool], optional): If `true` [`MaskFormerOutput`] will contain. Defaults to False.
-        backbone_config (Optional[Dict], optional): [description]. Defaults to None.
-        detr_config (Optional[Dict], optional): [description]. Defaults to None.
+        mask_feature_size (`int`,  defaults to `256`):
+            The masks' features size, this value will also be used to specify the Feature Pyramid Network featuresc
+            size.
+        no_object_weight (`float`, defaults to `0.1`):
+            Weight to apply to the null class .
+        use_auxilary_loss (`bool`, defaults to `False`):
+            If `true` [`MaskFormerOutput`] will contain.
+        backbone_config (`Dict`, *optional*, defaults to `None`):
+            The configuration passed to the backbone, if `None`, `swin-base` will be used. Defaults to None.
+        detr_config (`Dict`, *optional*, defaults to `None`):
+            The configuration passed to `detr`, if `None` the base config for `detr` will be used.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        dice_weight (Optional[float], optional): [description]. Defaults to 1.0.
-        cross_entropy_weight (Optional[float], optional): [description]. Defaults to 1.0.
-        mask_weight (Optional[float], optional): [description]. Defaults to 20.0.
+        dice_weight (`float`, *optional*, defaults to `1.0`):
+            The weight for the dice loss.
+        cross_entropy_weight (`float`, *optional*, defaults to `1.0`):
+            The weight for the cross entropy loss.
+        mask_weight (`float`, *optional*, defaults to `20.0`):
+            The weight for the mask loss.
+        num_labels (`int`, *optional*, defaults to `150`):
+            The number of labels.
 
     Raises:
         `ValueError`: Raised if the backbone model type selected is not in `MaskFormerConfig.backbones_supported`
@@ -88,8 +97,8 @@ class MaskFormerConfig(PretrainedConfig):
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
         use_auxilary_loss: bool = False,
-        backbone_config: Dict = None,
-        detr_config: Dict = None,
+        backbone_config: Optional[Dict] = None,
+        detr_config: Optional[Dict] = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         dice_weight: float = 1.0,
@@ -141,12 +150,14 @@ class MaskFormerConfig(PretrainedConfig):
         """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
-                Args:
-                    backbone_config (PretrainedConfig): The backbone configuration
-                    detr_config (DetrConfig): The transformer decoder configuration to use
+            Args:
+                backbone_config ([`PretrainedConfig`]):
+                    The backbone configuration.
+                detr_config ([`DetrConfig`]):
+                    The transformer decoder configuration to use
 
-                Returns:
-                    [`MaskFormerConfig`]: An instance of a configuration object
+            Returns:
+                [`MaskFormerConfig`]: An instance of a configuration object
         """
         return cls(backbone_config=backbone_config.to_dict(), detr_config=detr_config.to_dict(), **kwargs)
 

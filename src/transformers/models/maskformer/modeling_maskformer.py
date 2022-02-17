@@ -225,9 +225,8 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
             Last hidden states (final feature map) of the last stage of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            shape `(batch_size, num_channels, height, width)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -278,10 +277,10 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     [`~MaskFormerFeatureExtractor] for details regarding usage.
 
     Args:
-        class_queries_logits (torch.FloatTensor):
+        class_queries_logits (`torch.FloatTensor`):
             A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
             query.
-        masks_queries_logits (torch.FloatTensor):
+        masks_queries_logits (`torch.FloatTensor`):
             A tensor of shape `(batch_size, num_queries, num_classes + 1)` representing the proposed classes for each
             query. Note the `+ 1` is needed because we incorporate the null class.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -325,11 +324,11 @@ def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") ->
 
     Args:
         pixel_values (`torch.Tensor`):
-            The tensor we wish to upsample
+            The tensor we wish to upsample.
         like (`torch.Tensor`):
-            The tensor we wish to use as size target
-        mode (str, *optional*):
-            The interpolation mode. Defaults to "bilinear".
+            The tensor we wish to use as size target.
+        mode (str, *optional*, defaults to "bilinear"):
+            The interpolation mode.
 
     Returns:
         Tensor: The upsampled tensor
@@ -364,6 +363,8 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
         labels (`torch.Tensor`):
             A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
             (0 for the negative class and 1 for the positive class).
+        num_masks (`int`):
+            The number of masks present in the current batch.
 
     Returns:
         `torch.Tensor`: The computed loss.
@@ -404,7 +405,7 @@ def sigmoid_focal_loss(
             Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
 
     Returns:
-        `torch.Tensor`: The computed loss
+        `torch.Tensor`: The computed loss.
     """
     probs = inputs.sigmoid()
     cross_entropy_loss = binary_cross_entropy_with_logits(inputs, labels, reduction="none")
@@ -422,7 +423,7 @@ def sigmoid_focal_loss(
 # refactored from original implementation
 def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
-    A pair wise version of the dice loss, see `dice_loss` for usage
+    A pair wise version of the dice loss, see `dice_loss` for usage.
 
     Args:
         inputs (`torch.Tensor`):
@@ -432,7 +433,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
             (0 for the negative class and 1 for the positive class).
 
     Returns:
-        `torch.Tensor`: The computed loss between each pairs
+        `torch.Tensor`: The computed loss between each pairs.
     """
     inputs = inputs.sigmoid().flatten(1)
     numerator = 2 * torch.einsum("nc,mc->nm", inputs, labels)
@@ -445,17 +446,17 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
 # refactored from original implementation
 def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 0.25, gamma: float = 2.0) -> Tensor:
     """
-    A pair wise version of the focal loss, see `sigmoid_focal_loss` for usage
+    A pair wise version of the focal loss, see `sigmoid_focal_loss` for usage.
 
     Args:
         inputs (`torch.Tensor`):
-            A tensor representing a mask
+            A tensor representing a mask.
         labels (`torch.Tensor`):
             A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
             (0 for the negative class and 1 for the positive class).
 
     Returns:
-        `torch.Tensor`: The computed loss between each pairs
+        `torch.Tensor`: The computed loss between each pairs.
     """
     if alpha < 0:
         raise ValueError("alpha must be positive")
@@ -1717,9 +1718,12 @@ class MaskFormerHungarianMatcher(nn.Module):
         """Creates the matcher
 
         Params:
-            cost_class: This is the relative weight of the classification error in the matching cost
-            cost_mask: This is the relative weight of the focal loss of the binary mask in the matching cost
-            cost_dice: This is the relative weight of the dice loss of the binary mask in the matching cost
+            cost_class (`float`, defaults to `1.0`):
+                This is the relative weight of the classification error in the matching cost.
+            cost_mask (`float`, defaults to `1.0`):
+                This is the relative weight of the focal loss of the binary mask in the matching cost.
+            cost_dice (`float`, defaults to `1.0`):
+                This is the relative weight of the dice loss of the binary mask in the matching cost
         """
         super().__init__()
         if cost_class == 0 and cost_mask == 0 and cost_dice == 0:
@@ -1733,22 +1737,24 @@ class MaskFormerHungarianMatcher(nn.Module):
         """Performs the matching
 
         Params:
-            outputs: This is a dict that contains at least these entries:
+            outputs (`Dict[str, Tensor]`): This is a dict that contains at least these entries:
                  "masks_queries_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification
                  logits "class_queries_logits": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the
                  predicted masks
 
-            labels: This is a list of labels (len(labels) = batch_size), where each target is a dict containing:
-                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
-                           objects in the target) containing the class labels
-                 "mask_labels": Tensor of dim [num_target_boxes, H_gt, W_gt] containing the target masks
+            labels (`Dict[str, Tensor]`):
+                This is a list of labels (len(labels) = batch_size), where each target is a dict containing:
+                - **labels** -- A `torch.Tensor` of dim `num_target_boxes` (where num_target_boxes is the number of
+                  ground-truth objects in the target) containing the class labels.
+                - **mask_labels** -- A `torch.Tensor` of dim `num_target_boxes, H_gt, W_gt` containing the target
+                  masks.
 
         Returns:
-            A list of size batch_size, containing tuples of (index_i, index_j) where:
+            `List[Tuple[Tensor]]`: A list of size batch_size, containing tuples of (index_i, index_j) where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected labels (in order)
             For each batch element, it holds:
-                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+                len(index_i) = len(index_j) = min(num_queries, num_target_boxes).
         """
         indices: List[Tuple[np.array]] = []
 
@@ -1810,16 +1816,20 @@ class MaskFormerLoss(nn.Module):
         weight_dict: Dict[str, float],
         eos_coef: float,
     ):
-        """The MaskFormer Loss. The loss is computed very similar to DETR. The process happens in two steps:
-        1) we compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each
-        pair of matched ground-truth / prediction (supervise class and mask)
+        """
+        The MaskFormer Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we compute
+        hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each pair of
+        matched ground-truth / prediction (supervise class and mask)
 
         Args:
-            num_classes (`int`): The number of classes
-            matcher (MaskFormerHungarianMatcher):
+            num_classes (`int`):
+                The number of classes
+            matcher ([`MaskFormerHungarianMatcher]`):
                 A torch module that computes the assigments between the predictions and labels
-            weight_dict (Dict[str, float]): A dictionary of weights to be applied to the different losses
-            eos_coef (float): Weight to apply to the null class
+            weight_dict (`Dict[str, float]`):
+                A dictionary of weights to be applied to the different losses
+            eos_coef (`float`):
+                Weight to apply to the null class
         """
 
         super().__init__()
@@ -1850,7 +1860,7 @@ class MaskFormerLoss(nn.Module):
 
         Returns:
             `Dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
-            - **loss_cross_entropy** The loss computed using cross entropy on the predicted and ground truth labels.
+            - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
         """
 
         pred_logits: Tensor = outputs["class_queries_logits"]
@@ -1887,8 +1897,9 @@ class MaskFormerLoss(nn.Module):
 
         Returns:
             `Dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
-            - **loss_mask** The loss computed using sigmoid focal loss on the predicted and ground truth masks.
-            - **loss_dice** The loss computed using dice loss on the predicted on the predicted and ground truth masks.
+            - **loss_mask** -- The loss computed using sigmoid focal loss on the predicted and ground truth masks.
+            - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
+              masks.
         """
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
@@ -1946,9 +1957,10 @@ class MaskFormerLoss(nn.Module):
 
         Returns:
             `Dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
-            - **loss_cross_entropy** The loss computed using cross entropy on the predicted and ground truth labels.
-            - **loss_mask** The loss computed using sigmoid focal loss on the predicted and ground truth masks.
-            - **loss_dice** The loss computed using dice loss on the predicted on the predicted and ground truth masks.
+            - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
+            - **loss_mask** -- The loss computed using sigmoid focal loss on the predicted and ground truth masks.
+            - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
+              masks.
             if `use_auxilary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
             for each auxilary predictions.
         """
@@ -1994,8 +2006,9 @@ class MaskFormerSwinTransformerBackbone(nn.Module):
     This class uses [`MaskFormerSwinModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
     hidden_size)` to (`batch_size, num_channels, height, width)`).
 
-        Args:
-            config (`SwinConfig`): The configuration used by [`MaskFormerSwinModel`].
+    Args:
+        config (`SwinConfig`):
+            The configuration used by [`MaskFormerSwinModel`].
     """
 
     def __init__(self, config: SwinConfig):
@@ -2089,7 +2102,7 @@ class MaskFormerFPNModel(nn.Module):
         Args:
             in_features (`int`):
                 The number of input features (channels).
-            lateral_widths (List[int]):
+            lateral_widths (`List[int]`):
                 A list with the features (channels) size of each lateral connection.
             feature_size (int, *optional*, defaults to `256`):
                 The features (channels) of the resulting feature maps.
@@ -2119,9 +2132,9 @@ class MaskFormerPixelDecoder(nn.Module):
         Network creating a list of features maps. Then, it projects the last one to the correct `mask_size`.
 
         Args:
-            feature_size (int, *optional*, defaults to `256`):
+            feature_size (`int`, *optional*, defaults to `256`):
                 The feature size (channel dimension) of the FPN feature maps.
-            mask_feature_size (int, *optional*, defaults to `256`):
+            mask_feature_size (`int`, *optional*, defaults to `256`):
                 The features (channels) of the target masks size $C_{\epsilon}$ in the paper.
         """
         super().__init__()
@@ -2216,7 +2229,8 @@ class MaskFormerPixelLevelModule(nn.Module):
         generating an image feature map and pixel embeddings.
 
         Args:
-            config ([`MaskFormerConfig`]) The configuration used to instantiate this model.
+            config ([`MaskFormerConfig`]):
+                The configuration used to instantiate this model.
         """
         super().__init__()
         self.encoder = MaskFormerSwinTransformerBackbone(config.backbone_config)
