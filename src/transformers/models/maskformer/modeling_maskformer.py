@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-import torch.distributed as dist
 from torch import Tensor, nn
 from torch.nn.functional import binary_cross_entropy_with_logits, cross_entropy, interpolate
 
@@ -40,7 +39,7 @@ from ...file_utils import (
     requires_backends,
 )
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 from .configuration_maskformer import MaskFormerConfig
@@ -60,24 +59,6 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/maskformer-swin-base-ade",
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
-
-
-# TODO ask what I should do with dist code
-def get_world_size() -> int:
-    if not dist.is_available():
-        return 1
-    if not dist.is_initialized():
-        return 1
-    return dist.get_world_size()
-
-
-# This was copied from original implementation
-def is_dist_avail_and_initialized():
-    if not dist.is_available():
-        return False
-    if not dist.is_initialized():
-        return False
-    return True
 
 
 @dataclass
@@ -336,28 +317,20 @@ def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") ->
         Tensor: The upsampled tensor
     """
     _, _, height, width = like.shape
-    upsampled = interpolate(
-        pixel_values,
-        size=(height, width),
-        mode=mode,
-        align_corners=False,
-    )
+    upsampled = interpolate(pixel_values, size=(height, width), mode=mode, align_corners=False)
     return upsampled
 
 
 # refactored from original implementation
-def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
+def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     r"""
     Compute the DICE loss, similar to generalized IOU for masks as follow:
 
-    $$
-        \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}}
+    $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}} $$
 
-    $$ In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
+    In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
 
-    $$
-        \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}}
-    $$
+    $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}} $$
 
     Args:
         inputs (`torch.Tensor`):
@@ -366,7 +339,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
             A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
             (0 for the negative class and 1 for the positive class).
         num_masks (`int`):
-            The number of masks present in the current batch.
+            The number of masks present in the current batch, used for normalization.
 
     Returns:
         `torch.Tensor`: The computed loss.
@@ -387,11 +360,9 @@ def sigmoid_focal_loss(
     Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used in
     RetinaNet. The loss is computed as follows
 
-    $$
-         \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)}
-    $$
+    $$ \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)} $$
 
-    where $CE(p_t) = -\log{(p_t)}}$, CE is the standard Cross Entropy Loss
+    where \\(CE(p_t) = -\log{(p_t)}}\\), CE is the standard Cross Entropy Loss
 
     Please refer to equation (1,2,3) of the paper for a better understanding.
 
@@ -401,9 +372,11 @@ def sigmoid_focal_loss(
         labels (`torch.Tensor`):
             A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
             (0 for the negative class and 1 for the positive class).
-        alpha (float, *optional*):
-            Weighting factor in range (0,1) to balance positive vs negative examples. Default = -1 (no weighting).
-        gamma (float, *optional*):
+        num_masks (`int`):
+            The number of masks present in the current batch, used for normalization.
+        alpha (float, *optional*, defaults to `0.25`):
+            Weighting factor in range (0,1) to balance positive vs negative examples.
+        gamma (float, *optional*, defaults to `2`):
             Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
 
     Returns:
@@ -651,7 +624,7 @@ class MaskFormerSwinPatchMerging(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.swin.modeling_swin.MaskFormerSwinDropPath
+# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->MaskFormerSwin
 class MaskFormerSwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -705,13 +678,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         batch_size, dim, num_channels = hidden_states.shape
         mixed_query_layer = self.query(hidden_states)
 
@@ -762,7 +729,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.MaskFormerSwinSelfOutput
+# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->MaskFormerSwin
 class MaskFormerSwinSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -776,7 +743,7 @@ class MaskFormerSwinSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.MaskFormerSwinAttention
+# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->MaskFormerSwin
 class MaskFormerSwinAttention(nn.Module):
     def __init__(self, config, dim, num_heads):
         super().__init__()
@@ -809,7 +776,7 @@ class MaskFormerSwinAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.MaskFormerSwinIntermediate
+# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->MaskFormerSwin
 class MaskFormerSwinIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -825,7 +792,7 @@ class MaskFormerSwinIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.MaskFormerSwinOutput
+# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->MaskFormerSwin
 class MaskFormerSwinOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -990,12 +957,7 @@ class MaskFormerSwinLayer(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            block_hidden_states = block_module(
-                hidden_states,
-                input_dimensions,
-                layer_head_mask,
-                output_attentions,
-            )
+            block_hidden_states = block_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = block_hidden_states[0]
 
@@ -1096,35 +1058,6 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.MaskFormerSwinPreTrainedModel
-class MaskFormerSwinPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    maskformer models.
-    """
-
-    config_class = SwinConfig
-    base_model_prefix = "swin"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MaskFormerSwinEncoder):
-            module.gradient_checkpointing = value
-
-
 SWIN_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -1162,9 +1095,9 @@ SWIN_INPUTS_DOCSTRING = r"""
     "The bare MaskFormerSwin Model transformer outputting raw hidden-states without any specific head on top.",
     SWIN_START_DOCSTRING,
 )
-class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
+class MaskFormerSwinModel(nn.Module, ModuleUtilsMixin):
     def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         self.num_layers = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
@@ -1174,9 +1107,6 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -1488,30 +1418,6 @@ class DetrDecoderLayer(nn.Module):
         return outputs
 
 
-class DetrPreTrainedModel(PreTrainedModel):
-    config_class = DetrConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, DetrDecoder):
-            module.gradient_checkpointing = value
-
-
 # Copied from transformers.models.detr.modeling_detr._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -1528,7 +1434,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrDecoder
-class DetrDecoder(DetrPreTrainedModel):
+class DetrDecoder(nn.Module):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetrDecoderLayer`].
 
@@ -1845,7 +1751,7 @@ class MaskFormerLoss(nn.Module):
         self.register_buffer("empty_weight", empty_weight)
 
     def loss_labels(
-        self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor], indices: Tuple[np.array], num_masks: float
+        self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor], indices: Tuple[np.array], num_masks: int
     ) -> Dict[str, Tensor]:
         """Compute the losses related to the labels using cross entropy.
 
@@ -1974,7 +1880,7 @@ class MaskFormerLoss(nn.Module):
         indices = self.matcher(outputs_without_aux, labels)
 
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: Number = self.get_num_masks(labels, device=next(iter(outputs.values())).device)
+        num_masks: Number = self.get_num_masks(labels, device=outputs["masks_queries_logits"].device)
 
         # Compute all the requested losses
         losses: Dict[str, Tensor] = {}
@@ -1992,14 +1898,11 @@ class MaskFormerLoss(nn.Module):
 
         return losses
 
-    def get_num_masks(self, labels: Dict[str, Tensor], device: torch.device) -> Number:
+    def get_num_masks(self, labels: Dict[str, Tensor], device: torch.device) -> torch.Tensor:
         # Compute the average number of target masks accross all nodes, for normalization purposes
         num_masks = labels["class_labels"].shape[0]
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
-        if is_dist_avail_and_initialized():
-            torch.distributed.all_reduce(num_masks_pt)
-        num_masks_clamped: Number = torch.clamp(num_masks_pt / get_world_size(), min=1).item()
-        return num_masks_clamped
+        return num_masks_pt
 
 
 class MaskFormerSwinTransformerBackbone(nn.Module):
@@ -2359,6 +2262,33 @@ class MaskFormerPretrainedModel(PreTrainedModel):
             for layer in module:
                 nn.init.xavier_uniform_(layer[0].weight, gain=xavier_std)
                 nn.init.constant_(layer[0].bias, 0)
+        # copied from swin
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        # copied from DETR
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MaskFormerSwinEncoder):
+            module.gradient_checkpointing = value
+        if isinstance(module, DetrDecoder):
+            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(

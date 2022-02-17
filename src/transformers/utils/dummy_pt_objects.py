@@ -2274,7 +2274,7 @@ class MarianMTModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class MaskFormerForInstanceSegmentation(metaclass=DummyObject):

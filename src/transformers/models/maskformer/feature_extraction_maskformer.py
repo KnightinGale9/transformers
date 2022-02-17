@@ -129,7 +129,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 masks = torch.from_numpy(target["masks"])[:, None].float()
                 #  use PyTorch as current workaround
                 # TODO replace by self.resize
-                interpolated_masks = nn.functional.interpolate(masks, size=(height, width), mode="nearest")[:, 0] > 0.5
+                interpolated_masks = (
+                    nn.functional.interpolate(masks, size=(height, width), mode="nearest")[:, 0] > 0.5
+                ).float()
                 target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
