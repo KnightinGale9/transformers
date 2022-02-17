@@ -467,13 +467,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 If not set, defaults to the `is_thing_map` of ADE20K-150 panoptic.
 
         Returns:
-            Returns:
-                `List[Dict]`: A list of dictionaries, each dictionary containing two keys:
-                - **segmentation** -- a tensor of shape `(height, width)` where each pixel represent a `segment_id`.
-                - **segments** -- a dictionary with the following keys
-                    - **id** -- an integer representing the `segment_id`.
-                    - **category_id** -- an integer representing the segment's label.
-                    - **is_thing** -- a boolean, `True` if `category_id` was in `is_thing_map`, `False` otherwise.
+            `List[Dict]`: A list of dictionaries, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represent a `segment_id`.
+            - **segments** -- a dictionary with the following keys
+                - **id** -- an integer representing the `segment_id`.
+                - **category_id** -- an integer representing the segment's label.
+                - **is_thing** -- a boolean, `True` if `category_id` was in `is_thing_map`, `False` otherwise.
         """
 
         if is_thing_map is None:

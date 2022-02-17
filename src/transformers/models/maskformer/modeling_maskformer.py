@@ -2241,6 +2241,7 @@ class MaskFormerPretrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
+        std = self.config.init_std
         if isinstance(module, MaskFormerTransformerModule):
             if module.input_projection is not None:
                 nn.init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
@@ -2265,7 +2266,7 @@ class MaskFormerPretrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.backbone_config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -2478,7 +2479,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
 
         loss, loss_dict, auxilary_logits = None, None, None
 
-        we_have_labels: bool = mask_labels is not None and class_labels is not None
+        we_have_labels = mask_labels is not None and class_labels is not None
 
         if we_have_labels:
             logits: Dict[str, Tensor] = {
