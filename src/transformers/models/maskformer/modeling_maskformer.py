@@ -1450,7 +1450,8 @@ class DetrDecoder(nn.Module):
     """
 
     def __init__(self, config: DetrConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
 
@@ -1459,8 +1460,6 @@ class DetrDecoder(nn.Module):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def forward(
         self,
@@ -1892,9 +1891,9 @@ class MaskFormerLoss(nn.Module):
             for i, aux_outputs in enumerate(outputs["auxilary_predictions"]):
                 indices = self.matcher(aux_outputs, labels)
                 for loss in self.losses:
-                    l_dict = self.get_loss(loss, aux_outputs, labels, indices, num_masks)
-                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
-                    losses.update(l_dict)
+                    loss_dict = self.get_loss(loss, aux_outputs, labels, indices, num_masks)
+                    loss_dict = {k + f"_{i}": v for k, v in loss_dict.items()}
+                    losses.update(loss_dict)
 
         return losses
 
@@ -2018,9 +2017,9 @@ class MaskFormerFPNModel(nn.Module):
         )
 
     def forward(self, features: List[Tensor]) -> List[Tensor]:
-        fpn_features: List[Tensor] = []
-        last_feature: Tensor = features[-1]
-        other_features: List[Tensor] = features[:-1]
+        fpn_features = []
+        last_feature = features[-1]
+        other_features = features[:-1]
         output = self.stem(last_feature)
         for layer, left in zip(self.layers, other_features[::-1]):
             output = layer(output, left)
@@ -2111,13 +2110,13 @@ class MaskformerMLPPredictionHead(nn.Sequential):
             num_layers (int, *optional*, defaults to `3`):
                 The number of layers.
         """
-        in_dims: List[int] = [input_dim] + [hidden_dim] * (num_layers - 1)
-        out_dims: List[int] = [hidden_dim] * (num_layers - 1) + [output_dim]
+        in_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
+        out_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
 
-        layers: List[nn.Module] = []
+        layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
 
-            layer: nn.Module = nn.Sequential(
+            layer = nn.Sequential(
                 nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True) if i < num_layers - 1 else nn.Identity()
             )
             layers.append(layer)
@@ -2336,18 +2335,27 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         transformer_module_output: DetrDecoderOutput = self.transformer_module(image_features, output_hidden_states)
         queries = transformer_module_output.last_hidden_state
 
+        encoder_hidden_states = pixel_level_module_output.encoder_hidden_states if output_hidden_states else ()
+        pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states if output_hidden_states else ()
+        transformer_decoder_hidden_states = transformer_module_output.hidden_states if output_hidden_states else ()
+
         if not return_dict:
-            return (image_features, pixel_embeddings, queries)
+            return (
+                image_features,
+                pixel_embeddings,
+                queries,
+                encoder_hidden_states,
+                pixel_decoder_hidden_states,
+                transformer_decoder_hidden_states,
+            )
 
         return MaskFormerOutput(
             encoder_last_hidden_state=image_features,
             pixel_decoder_last_hidden_state=pixel_embeddings,
             transformer_decoder_last_hidden_state=queries,
-            encoder_hidden_states=pixel_level_module_output.encoder_hidden_states if output_hidden_states else (),
-            pixel_decoder_hidden_states=pixel_level_module_output.decoder_hidden_states
-            if output_hidden_states
-            else (),
-            transformer_decoder_hidden_states=transformer_module_output.hidden_states if output_hidden_states else (),
+            encoder_hidden_states=encoder_hidden_states,
+            pixel_decoder_hidden_states=pixel_decoder_hidden_states,
+            transformer_decoder_hidden_states=transformer_decoder_hidden_states,
         )
 
 
