@@ -187,9 +187,10 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 
 @dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
-    """MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the `encoder`
-    and `decoder`. By default, the `encoder` is a MaskFormerSwin Transformer and the `decoder` is a Feature Pyramid
-    Network (FPN).
+    """
+    MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
+    `encoder` and `decoder`. By default, the `encoder` is a MaskFormerSwin Transformer and the `decoder` is a Feature
+    Pyramid Network (FPN).
 
     The `encoder_last_hidden_state` are referred on the paper as **images features**, while `decoder_last_hidden_state`
     as **pixel embeddings**
@@ -236,7 +237,8 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
 
 @dataclass
 class MaskFormerOutput(ModelOutput):
-    """Class for outputs of [`MaskFormerModel`]. This class returns all the needed hidden states to compute the logits.
+    """
+    Class for outputs of [`MaskFormerModel`]. This class returns all the needed hidden states to compute the logits.
 
     Args:
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1738,9 +1740,10 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         Params:
             outputs (`Dict[str, Tensor]`): This is a dict that contains at least these entries:
-                 "masks_queries_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification
-                 logits "class_queries_logits": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the
-                 predicted masks
+                - *masks_queries_logits* -- A `torch.Tensor` of dim `batch_size, num_queries, num_classes` with the
+                  classification logits.
+                - *class_queries_logits* -- A `torch.Tensor` of dim `batch_size, num_queries, H_pred, W_pred` with the
+                  predicted masks.
 
             labels (`Dict[str, Tensor]`):
                 This is a list of labels (len(labels) = batch_size), where each target is a dict containing:
@@ -1758,11 +1761,11 @@ class MaskFormerHungarianMatcher(nn.Module):
         """
         indices: List[Tuple[np.array]] = []
 
-        preds_masks: Tensor = outputs["masks_queries_logits"]
-        labels_masks: Tensor = labels["mask_labels"]
-        preds_probs: Tensor = outputs["class_queries_logits"].softmax(dim=-1)
+        preds_masks = outputs["masks_queries_logits"]
+        labels_masks = labels["mask_labels"]
+        preds_probs = outputs["class_queries_logits"].softmax(dim=-1)
         # downsample all masks in one go -> save memory
-        labels_masks: Tensor = interpolate(labels_masks, size=preds_masks.shape[-2:], mode="nearest")
+        labels_masks = interpolate(labels_masks, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(
             preds_probs, preds_masks, labels_masks, labels["class_labels"]
@@ -1770,21 +1773,19 @@ class MaskFormerHungarianMatcher(nn.Module):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
-            cost_class: Tensor = -pred_probs[:, labels]
+            cost_class = -pred_probs[:, labels]
             # flatten spatial dimension "q h w -> q (h w)"
             num_queries, height, width = pred_mask.shape
-            pred_mask_flat: Tensor = pred_mask.view(num_queries, height * width)  # [num_queries, H*W]
+            pred_mask_flat = pred_mask.view(num_queries, height * width)  # [num_queries, H*W]
             # same for target_mask "c h w -> c (h w)"
             num_channels, height, width = target_mask.shape
-            target_mask_flat: Tensor = target_mask.view(num_channels, height * width)  # [num_total_labels, H*W]
+            target_mask_flat = target_mask.view(num_channels, height * width)  # [num_total_labels, H*W]
             # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
-            cost_mask: Tensor = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
+            cost_mask = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
             # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
-            cost_dice: Tensor = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
+            cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
-            cost_matrix: Tensor = (
-                self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            )
+            cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
             # do the assigmented using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
@@ -1839,7 +1840,7 @@ class MaskFormerLoss(nn.Module):
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
         self.losses = ["labels", "masks"]
-        empty_weight: Tensor = torch.ones(self.num_classes + 1)
+        empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
@@ -1868,15 +1869,15 @@ class MaskFormerLoss(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
         # shape = [BATCH, N_QUERIES]
-        target_classes_o: Tensor = torch.cat([target[j] for target, (_, j) in zip(labels["class_labels"], indices)])
+        target_classes_o = torch.cat([target[j] for target, (_, j) in zip(labels["class_labels"], indices)])
         # shape = [BATCH, N_QUERIES]
-        target_classes: Tensor = torch.full(
+        target_classes = torch.full(
             (batch_size, num_queries), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
         )
         target_classes[idx] = target_classes_o
         # target_classes is a [BATCH, CLASSES, N_QUERIES], we need to permute pred_logits "b q c -> b c q"
-        pred_logits_permuted: Tensor = pred_logits.permute(0, 2, 1)
-        loss_ce: Tensor = cross_entropy(pred_logits_permuted, target_classes, self.empty_weight)
+        pred_logits_permuted = pred_logits.permute(0, 2, 1)
+        loss_ce = cross_entropy(pred_logits_permuted, target_classes, self.empty_weight)
         losses: Tensor = {"loss_cross_entropy": loss_ce}
         return losses
 
@@ -1993,8 +1994,8 @@ class MaskFormerLoss(nn.Module):
 
     def get_num_masks(self, labels: Dict[str, Tensor], device: torch.device) -> Number:
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: int = labels["class_labels"].shape[0]
-        num_masks_pt: Tensor = torch.as_tensor([num_masks], dtype=torch.float, device=device)
+        num_masks = labels["class_labels"].shape[0]
+        num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_masks_pt)
         num_masks_clamped: Number = torch.clamp(num_masks_pt / get_world_size(), min=1).item()
@@ -2030,7 +2031,7 @@ class MaskFormerSwinTransformerBackbone(nn.Module):
             hidden_state_unpolled: Tensor = hidden_state[-1]
             hidden_state_norm = norm(hidden_state_unpolled)
             # our pixel decoder (FPN) expect 3D tensors (features)
-            batch_size, sequence_length, hidden_size = hidden_state_norm.shape
+            batch_size, _, hidden_size = hidden_state_norm.shape
             # reshape our tensor "b (h w) d -> b d h w"
             hidden_state_permuted = (
                 hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
@@ -2117,7 +2118,7 @@ class MaskFormerFPNModel(nn.Module):
         fpn_features: List[Tensor] = []
         last_feature: Tensor = features[-1]
         other_features: List[Tensor] = features[:-1]
-        output: Tensor = self.stem(last_feature)
+        output = self.stem(last_feature)
         for layer, left in zip(self.layers, other_features[::-1]):
             output = layer(output, left)
             fpn_features.append(output)
@@ -2272,10 +2273,10 @@ class MaskFormerTransformerModule(nn.Module):
     def forward(self, image_features: Tensor, output_hidden_states: Optional[bool] = False) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        position_embeddings: Tensor = self.position_embedder(image_features)
+        position_embeddings = self.position_embedder(image_features)
         # repeat the queries "q c -> b q c"
-        batch_size: int = image_features.shape[0]
-        queries_embeddings: Tensor = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+        batch_size = image_features.shape[0]
+        queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         inputs_embeds = torch.zeros_like(queries_embeddings)
 
         batch_size, num_channels, height, width = image_features.shape
@@ -2399,11 +2400,11 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         pixel_level_module_output: MaskFormerPixelLevelModuleOutput = self.pixel_level_module(
             pixel_values, output_hidden_states
         )
-        image_features: Tensor = pixel_level_module_output.encoder_last_hidden_state
-        pixel_embeddings: Tensor = pixel_level_module_output.decoder_last_hidden_state
+        image_features = pixel_level_module_output.encoder_last_hidden_state
+        pixel_embeddings = pixel_level_module_output.decoder_last_hidden_state
 
         transformer_module_output: DetrDecoderOutput = self.transformer_module(image_features, output_hidden_states)
-        queries: Tensor = transformer_module_output.last_hidden_state
+        queries = transformer_module_output.last_hidden_state
 
         if not return_dict:
             return (image_features, pixel_embeddings, queries)
@@ -2461,31 +2462,31 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
     def get_logits(self, outputs: MaskFormerOutput) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
-        pixel_embeddings: Tensor = outputs.pixel_decoder_last_hidden_state
+        pixel_embeddings = outputs.pixel_decoder_last_hidden_state
         # get the auxilary predictions (one for each decoder's layer)
         auxilary_logits: List[str, Tensor] = []
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxilary loss then we are going to return more than one element in the list
         if self.config.use_auxilary_loss:
-            stacked_decoder_outputs: Tensor = torch.stack(outputs.transformer_decoder_hidden_states)
-            classes: Tensor = self.class_predictor(stacked_decoder_outputs)
-            class_queries_logits: Tensor = classes[-1]
+            stacked_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
+            classes = self.class_predictor(stacked_decoder_outputs)
+            class_queries_logits = classes[-1]
             # get the masks
-            mask_embeddings: Tensor = self.mask_embedder(stacked_decoder_outputs)
+            mask_embeddings = self.mask_embedder(stacked_decoder_outputs)
             # sum up over the channels for each embedding
-            binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
-            masks_queries_logits: Tensor = binaries_masks[-1]
+            binaries_masks = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
+            masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
             for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
                 auxilary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})
 
         else:
-            transformer_decoder_hidden_states: Tensor = outputs.transformer_decoder_last_hidden_state
-            classes: Tensor = self.class_predictor(transformer_decoder_hidden_states)
-            class_queries_logits: Tensor = classes
+            transformer_decoder_hidden_states = outputs.transformer_decoder_last_hidden_state
+            classes = self.class_predictor(transformer_decoder_hidden_states)
+            class_queries_logits = classes
             # get the masks
-            mask_embeddings: Tensor = self.mask_embedder(transformer_decoder_hidden_states)
+            mask_embeddings = self.mask_embedder(transformer_decoder_hidden_states)
             # sum up over the channels
-            masks_queries_logits: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
+            masks_queries_logits = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
         return class_queries_logits, masks_queries_logits, auxilary_logits
 
