@@ -214,7 +214,7 @@ jobs:
     runs-on: ${{ matrix.machines }}
     needs: setup
     container:
-      image: huggingface/transformers-pytorch-latest-release-deepspeed-gpu
+      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
