@@ -262,7 +262,6 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         return MaskFormerFeatureExtractor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     @slow
-    @torch.no_grad()
     def test_inference_no_head(self):
         model = MaskFormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
         feature_extractor = self.default_feature_extractor
@@ -305,7 +304,6 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @torch.no_grad()
     def test_inference_instance_segmentation_head(self):
         model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         feature_extractor = self.default_feature_extractor
@@ -341,7 +339,6 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     @slow
-    @torch.no_grad()
     def test_with_annotations_and_loss(self):
         model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         feature_extractor = self.default_feature_extractor
@@ -355,6 +352,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        outputs: MaskFormerForInstanceSegmentationOutput = model(**inputs)
+        with torch.no_grad():
+            outputs: MaskFormerForInstanceSegmentationOutput = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
