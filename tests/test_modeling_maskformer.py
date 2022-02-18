@@ -106,16 +106,14 @@ class MaskFormerModelTester:
         self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone_config.depths))
         self.parent.assertTrue(len(transformer_decoder_hidden_states), config.detr_config.decoder_layers)
 
-    @torch.no_grad()
-    def create_and_check_maskformer_model(
-        self, config, pixel_values, pixel_mask, output_hidden_states=False, **kwargs
-    ):
-        model = MaskFormerModel(config=config)
-        model.to(torch_device)
-        model.eval()
+    def create_and_check_maskformer_model(self, config, pixel_values, pixel_mask, output_hidden_states=False):
+        with torch.no_grad():
+            model = MaskFormerModel(config=config)
+            model.to(torch_device)
+            model.eval()
 
-        output: MaskFormerOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        output: MaskFormerOutput = model(pixel_values, output_hidden_states=True)
+            output: MaskFormerOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+            output: MaskFormerOutput = model(pixel_values, output_hidden_states=True)
         # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
@@ -129,7 +127,6 @@ class MaskFormerModelTester:
         if output_hidden_states:
             self.check_output_hidden_state(output, config)
 
-    @torch.no_grad()
     def create_and_check_maskformer_instance_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
@@ -153,14 +150,15 @@ class MaskFormerModelTester:
                 result.class_queries_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1)
             )
 
-        result: MaskFormerForInstanceSegmentationOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
+        with torch.no_grad():
+            result: MaskFormerForInstanceSegmentationOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+            result = model(pixel_values)
 
-        comm_check_on_output(result)
+            comm_check_on_output(result)
 
-        result = model(
-            pixel_values=pixel_values, pixel_mask=pixel_mask, mask_labels=mask_labels, class_labels=class_labels
-        )
+            result = model(
+                pixel_values=pixel_values, pixel_mask=pixel_mask, mask_labels=mask_labels, class_labels=class_labels
+            )
 
         comm_check_on_output(result)
 
