@@ -143,6 +143,9 @@ class MaskFormerConfig(PretrainedConfig):
         self.mask_weight = mask_weight
         self.use_auxilary_loss = use_auxilary_loss
         self.no_object_weight = no_object_weight
+
+        self.num_attention_heads = self.detr_config.encoder_attention_heads
+        self.num_hidden_layers = self.detr_config.num_hidden_layers
         super().__init__(num_labels=num_labels, **kwargs)
 
     @classmethod
@@ -160,10 +163,6 @@ class MaskFormerConfig(PretrainedConfig):
                 [`MaskFormerConfig`]: An instance of a configuration object
         """
         return cls(backbone_config=backbone_config.to_dict(), detr_config=detr_config.to_dict(), **kwargs)
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.transformer_decoder.encoder_attention_heads
 
     @property
     def hidden_size(self) -> int:

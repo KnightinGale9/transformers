@@ -240,6 +240,9 @@ class MaskFormerOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
+        hidden_states `tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` containing `encoder_hidden_states`, `pixel_decoder_hidden_states` and
+            `decoder_hidden_states`
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -248,6 +251,7 @@ class MaskFormerOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -284,6 +288,9 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
+        hidden_states `tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` containing `encoder_hidden_states`, `pixel_decoder_hidden_states` and
+            `decoder_hidden_states`
     """
 
     class_queries_logits: torch.FloatTensor = None
@@ -299,6 +306,7 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict[str, torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
@@ -2357,6 +2365,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
+            hidden_states=(encoder_hidden_states, pixel_decoder_hidden_states, transformer_decoder_hidden_states),
         )
 
 
