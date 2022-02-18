@@ -22,10 +22,6 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import MaskFormerConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.models.maskformer.modeling_maskformer import (
-    MaskFormerForInstanceSegmentationOutput,
-    MaskFormerOutput,
-)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -36,6 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
+    from transformers.models.maskformer.modeling_maskformer import (
+        MaskFormerForInstanceSegmentationOutput,
+        MaskFormerOutput,
+    )
 
 if is_vision_available():
     from PIL import Image
