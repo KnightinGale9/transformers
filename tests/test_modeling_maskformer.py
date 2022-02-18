@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import MaskFormerConfig, is_torch_available, is_vision_available
+from transformers import MaskFormerConfig, is_torch_available, is_vision_available, torch_device
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, require_vision, slow
 
@@ -36,7 +36,6 @@ if is_torch_available():
         MaskFormerForInstanceSegmentationOutput,
         MaskFormerOutput,
     )
-    from transformers.testing_utils import torch_device
 
 if is_vision_available():
     from PIL import Image
@@ -98,7 +97,7 @@ class MaskFormerModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def check_output_hidden_state(self, output: MaskFormerOutput, config: MaskFormerConfig):
+    def check_output_hidden_state(self, output, config):
         encoder_hidden_states = output.encoder_hidden_states
         pixel_decoder_hidden_states = output.pixel_decoder_hidden_states
         transformer_decoder_hidden_states = output.transformer_decoder_hidden_states
