@@ -19,10 +19,8 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
-from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
-
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_torch_available
+from ...file_utils import TensorType, is_torch_available, is_vision_available
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import logging
 
@@ -31,6 +29,10 @@ if is_torch_available():
     import torch
     from torch import Tensor, nn
     from torch.nn.functional import interpolate
+    from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
+
+if is_vision_available():
+    from torchvision.transforms.functional import to_tensor
 
 logger = logging.get_logger(__name__)
 
@@ -54,6 +56,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         max_size (`int`, *optional*, defaults to `1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
+        size_divisibility (`int`, *optional*, defaults to `32`):
+            Some backbones need images divisible by a certain number, if not passes it detauls to the value used in swin.    
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
@@ -66,12 +70,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
-        self, do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, **kwargs
+        self, do_resize=True, size=800, max_size=1333, size_divisibility=32, do_normalize=True, image_mean=None, image_std=None, **kwargs
     ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
+        self.size_divisibility = size_divisibility
+        self.ignore_label = 255
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
@@ -114,11 +120,16 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 # so we revert the tuple
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
 
-        size = get_size(image.size, size, max_size)
-        rescaled_image = self.resize(image, size=size)
-        # pil image have inverted width, height
-        width, height = size
+        width, height = get_size(image.size, size, max_size)
 
+        if self.size_divisibility > 0:
+            height = int(np.ceil(height / self.size_divisibility)) * self.size_divisibility
+            width = int(np.ceil(width / self.size_divisibility)) * self.size_divisibility
+
+        size = (width, height)
+        rescaled_image = self.resize(image, size=size)
+    
+       
         has_target = target is not None
 
         if has_target:
@@ -135,6 +146,28 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
+
+    # def _pad_for_size_divisibility(self, image, size_divisibility, target = None):
+    #     self._ensure_format_supported(image)
+    #     # fall back to pytorch to pad       
+    #     if isinstance(image, Image.Image):
+    #         image = to_tensor(image)
+    #     elif isinstance(image, np.ndarray):
+    #         image = torch.from_numpy(image)
+
+    #     image_size = (image.shape[-2], image.shape[-1])
+    #     padding_size = [
+    #         0,
+    #         self.size_divisibility - image_size[1],
+    #         0,
+    #         self.size_divisibility - image_size[0],
+    #     ]
+    #     image = nn.functional.pad(image, padding_size, value=128).contiguous()
+    #     if target is not None:
+    #         target = nn.functional.pad(target, padding_size, value=self.ignore_label).contiguous()
+
+    #     image = image.numpy()
+    #     return image, target
 
     def _normalize(self, image, mean, std, target=None):
         """

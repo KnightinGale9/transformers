@@ -553,7 +553,7 @@ class MaskFormerSwinPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def maybe_pad(self, pixel_values, width, height):
+    def maybe_pad(self, pixel_values, height, width):
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
             pixel_values = nn.functional.pad(pixel_values, pad_values)
@@ -902,7 +902,7 @@ class MaskFormerSwinBlock(nn.Module):
         else:
             attention_windows = shifted_windows
 
-        was_padded = pad_values[2] > 0 or pad_values[3]
+        was_padded = pad_values[3] > 0 or pad_values[5] > 0
         if was_padded:
             attention_windows = attention_windows[:, :height, :width, :].contiguous()
 

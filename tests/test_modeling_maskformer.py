@@ -26,7 +26,7 @@ from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerOutput,
 )
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-
+import numpy as np
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin
 
@@ -103,6 +103,7 @@ class MaskFormerModelTester:
         self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone.depths))
         self.parent.assertTrue(len(transformer_decoder_hidden_states), config.transformer_decoder.decoder_layers)
 
+    @torch.no_grad()
     def create_and_check_maskformer_model(
         self, config, pixel_values, pixel_mask, output_hidden_states=False, **kwargs
     ):
@@ -125,6 +126,7 @@ class MaskFormerModelTester:
         if output_hidden_states:
             self.check_output_hidden_state(output, config)
 
+    @torch.no_grad()
     def create_and_check_maskformer_instance_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
@@ -214,6 +216,8 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
+        # TODO remove the following line when pushed to Facebook
+        MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = ["Francesco/maskformer-swin-small-coco"]
         for model_name in MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MaskFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
@@ -243,14 +247,28 @@ def prepare_img():
 @require_vision
 @slow
 class MaskFormerModelIntegrationTest(unittest.TestCase):
+
     @cached_property
     def default_feature_extractor(self):
+        # TODO change Francesco to Facebook
         return (
-            MaskFormerFeatureExtractor.from_pretrained(MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP[0])
+            MaskFormerFeatureExtractor.from_pretrained('Francesco/maskformer-swin-small-coco')
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_no_head(self):
-        self.assertTrue(False)
+        model = MaskFormerModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
+        input_size = (3, 384, 384)
+        feature_extractor = self.default_feature_extractor
+        encoding = feature_extractor([np.zeros(input_size)], return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs: MaskFormerOutput = model(**encoding)
+
+        
+
+    @slow
+    def test_with_image(self):
+        pass

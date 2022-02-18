@@ -17,19 +17,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
-
+import sys
 import torch
 import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor
+sys.path.append('/home/zuppif/Documents/Work/hugging_face/') 
 
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
+from MaskFormer.mask_former import add_mask_former_config
+from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
-from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
-from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
     MaskFormerForInstanceSegmentation,
@@ -121,7 +122,7 @@ class OriginalMaskFormerConfigToOursConverter:
                 pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
                 image_size=swin.PRETRAIN_IMG_SIZE,
                 in_channels=3,
-                patch_size=swin.PATCH_SIZE,
+                patch_size=swin.PATCH_SIZE[0],
                 embed_dim=swin.EMBED_DIM,
                 depths=swin.DEPTHS,
                 num_heads=swin.NUM_HEADS,
@@ -168,6 +169,7 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
             max_size=model_input.MAX_SIZE_TEST,
+            size_divisibility=32 # 32 is required by swin
         )
 
 
@@ -577,13 +579,17 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
 
-            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-3)
+            assert torch.allclose(
+                original_model_feature, our_model_feature, atol=1e-3
+            ), "The backbone features are not the same."
 
         original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
         )
 
-        assert torch.allclose(original_model_pixel_out[0], our_model_output.pixel_decoder_last_hidden_state, atol=1e-4)
+        assert torch.allclose(
+            original_model_pixel_out[0], our_model_output.pixel_decoder_last_hidden_state, atol=1e-4
+        ), "The pixel decoder feature are not the same"
 
         # let's test the full model
         original_model_out = original_model([{"image": x.squeeze(0)}])
@@ -596,7 +602,9 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
 
         our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
-        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-3)
+        assert torch.allclose(
+            original_segmentation, our_segmentation, atol=1e-3
+        ), "The segmentation image is not the same."
 
         logger.info("✅ Test passed!")
 
@@ -650,10 +658,11 @@ if __name__ == "__main__":
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
     save_directory: Path = args.pytorch_dump_folder_path
-
+    
     checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
 
     config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
+
 
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
@@ -696,15 +705,15 @@ if __name__ == "__main__":
         feature_extractor.save_pretrained(save_directory / model_name)
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
-        feature_extractor.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            organization="Francesco",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        mask_former_for_instance_segmentation.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            organization="Francesco",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        # feature_extractor.push_to_hub(
+        #     repo_path_or_name=save_directory / model_name,
+        #     organization="Francesco",
+        #     commit_message="Add model",
+        #     use_temp_dir=True,
+        # )
+        # mask_former_for_instance_segmentation.push_to_hub(
+        #     repo_path_or_name=save_directory / model_name,
+        #     organization="Francesco",
+        #     commit_message="Add model",
+        #     use_temp_dir=True,
+        # )
